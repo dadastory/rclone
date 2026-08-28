@@ -33,6 +33,7 @@ import (
 	"github.com/rclone/rclone/lib/encoder"
 	"github.com/rclone/rclone/lib/oauthutil"
 	"github.com/rclone/rclone/lib/pacer"
+	"github.com/rclone/rclone/lib/readers"
 	"github.com/rclone/rclone/lib/rest"
 	"golang.org/x/oauth2"
 )
@@ -1030,7 +1031,7 @@ func (f *Fs) Copy(ctx context.Context, src fs.Object, remote string) (fs.Object,
 		fs.Debugf(f, "Copy: failed to get metadata options: %v", err)
 	}
 	if len(mergedMeta) > 0 {
-		copyReq.Properties = make(map[string]interface{})
+		copyReq.Properties = make(map[string]any)
 		for key, value := range mergedMeta {
 			switch key {
 			case "content-type", "sha256", "btime", "mtime", "utime",
@@ -1720,7 +1721,7 @@ func (o *Object) uploadMultipart(ctx context.Context, in io.Reader, leaf, direct
 	}
 
 	// Create metadata
-	metadata := map[string]interface{}{
+	metadata := map[string]any{
 		"fileName": leaf,
 		"mimeType": mimeType,
 	}
@@ -1771,9 +1772,16 @@ func (o *Object) uploadMultipart(ctx context.Context, in io.Reader, leaf, direct
 	}
 
 	// Read and write file content
-	_, err = io.Copy(fileWriter, in)
+	counter := readers.NewCountingReader(in)
+	_, err = io.Copy(fileWriter, counter)
 	if err != nil {
 		return fmt.Errorf("failed to copy file content: %w", err)
+	}
+
+	// Check the source supplied the number of bytes it declared
+	// otherwise a truncated file would be stored as a good upload.
+	if int64(counter.BytesRead()) != size {
+		return fmt.Errorf("expected %d bytes in input, but got %d: %w", size, counter.BytesRead(), io.ErrUnexpectedEOF)
 	}
 
 	err = writer.Close()
@@ -1864,7 +1872,7 @@ func (o *Object) uploadResume(ctx context.Context, in io.Reader, leaf, directory
 	}
 
 	// Prepare metadata for resumable upload initialization
-	metadata := map[string]interface{}{
+	metadata := map[string]any{
 		"fileName": leaf,
 	}
 
@@ -1897,13 +1905,9 @@ func (o *Object) uploadResume(ctx context.Context, in io.Reader, leaf, directory
 	}
 
 	// Now upload the content in chunks
-	chunkSize := int64(o.fs.opt.ChunkSize)
-	if chunkSize < 256*1024 {
-		chunkSize = 256 * 1024 // Minimum chunk size according to Huawei Drive API
-	}
-	if chunkSize > 64*1024*1024 {
-		chunkSize = 64 * 1024 * 1024 // Maximum single upload size
-	}
+	// Note 256k is the minimum chunk size and 64M the maximum
+	// single upload size according to the Huawei Drive API
+	chunkSize := min(max(int64(o.fs.opt.ChunkSize), 256*1024), 64*1024*1024)
 
 	buf := make([]byte, chunkSize)
 	var offset int64
@@ -2082,8 +2086,8 @@ func (o *Object) SetMetadata(ctx context.Context, metadata fs.Metadata) error {
 
 	// Prepare the update request payload
 	updateReq := api.UpdateFileRequest{
-		Properties:  make(map[string]interface{}),
-		AppSettings: make(map[string]interface{}),
+		Properties:  make(map[string]any),
+		AppSettings: make(map[string]any),
 	}
 
 	// Process metadata and separate into properties and app settings
@@ -2094,7 +2098,7 @@ func (o *Object) SetMetadata(ctx context.Context, metadata fs.Metadata) error {
 			updateReq.Description = value
 		case "favorite":
 			if favorite, err := strconv.ParseBool(value); err == nil {
-				updateReq.Favorite = api.BoolPtr(favorite)
+				updateReq.Favorite = new(favorite)
 			}
 		case "content-type":
 			// Allow setting/overriding MIME type
