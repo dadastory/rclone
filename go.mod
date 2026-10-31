@@ -2,7 +2,10 @@ module github.com/rclone/rclone
 
 go 1.27.2
 
-godebug x509negativeserial=1
+godebug (
+	multipathtcp=0
+	x509negativeserial=1
+)
 
 require (
 	bazil.org/fuse v0.0.0-20230120002735-62a210ff1fd5
@@ -77,7 +80,7 @@ require (
 	github.com/quasilyte/go-ruleguard/dsl v0.3.23
 	github.com/rclone/Proton-API-Bridge v1.0.5
 	github.com/rclone/go-proton-api v1.0.4
-	github.com/rclone/gofakes3 v0.0.11
+	github.com/rclone/gofakes3 v0.0.12
 	github.com/rfjakob/eme v1.2.0
 	github.com/rivo/uniseg v0.4.7
 	github.com/rogpeppe/go-internal v1.16.0
@@ -100,7 +103,7 @@ require (
 	goftp.io/server/v2 v2.0.3
 	golang.org/x/crypto v0.58.0
 	golang.org/x/mobile v0.0.0-20261011034528-197770444867
-	golang.org/x/net v0.61.0
+	golang.org/x/net v0.62.0
 	golang.org/x/oauth2 v0.37.0
 	golang.org/x/sync v0.24.0
 	golang.org/x/sys v0.49.0
